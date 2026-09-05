@@ -1,0 +1,51 @@
+{
+  "all_candidates": [
+    "age",
+    "depression_score",
+    "fatigue_score",
+    "sex_male",
+    "current_smoking",
+    "feeling_terrified",
+    "feeling_afraid",
+    "hypertension",
+    "diabetes",
+    "dyslipidemia",
+    "heart_disease",
+    "copd",
+    "stroke"
+  ],
+  "boruta_confirmed": [
+    "fatigue_score",
+    "feeling_afraid",
+    "hypertension",
+    "heart_disease",
+    "stroke"
+  ],
+  "final_model_features": [
+    "age",
+    "depression_score",
+    "fatigue_score",
+    "feeling_terrified",
+    "feeling_afraid",
+    "hypertension",
+    "diabetes",
+    "heart_disease",
+    "copd",
+    "stroke"
+  ],
+  "boruta_full": {
+    "age": false,
+    "depression_score": false,
+    "fatigue_score": true,
+    "sex_male": false,
+    "current_smoking": false,
+    "feeling_terrified": false,
+    "feeling_afraid": true,
+    "hypertension": true,
+    "diabetes": false,
+    "dyslipidemia": false,
+    "heart_disease": true,
+    "copd": false,
+    "stroke": true
+  }
+}
