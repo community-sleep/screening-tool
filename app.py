@@ -4,10 +4,10 @@ Streamlit web application for the published XGBoost + Boruta prediction model.
 Run locally:
     streamlit run app.py
 
-The app accepts the 10 Boruta-confirmed predictors from the user and returns:
-  - Predicted probability of 5-year mortality
+The app accepts the 10 model predictors from the user and returns:
+  - Predicted probability of sleep disorder
   - Risk category (Low / Intermediate / High)
-  - SHAP feature contributions for the individual prediction (force plot)
+  - SHAP feature contributions for the individual prediction
   - Local feature importance for the input vector
 
 The model, preprocessor, feature list, and SHAP background are loaded from the
@@ -30,8 +30,8 @@ import streamlit as st
 # Page setup
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="HCC 5-Year Mortality Risk Calculator",
-    page_icon=":hospital:",
+    page_title="Sleep Disorder Risk Screening Tool",
+    page_icon=":bed:",
     layout="wide",
 )
 
@@ -52,7 +52,7 @@ def load_artifacts():
 # ---------------------------------------------------------------------------
 # Sidebar — patient input
 # ---------------------------------------------------------------------------
-st.sidebar.header(":clipboard: Patient input (10 predictors)")
+st.sidebar.header(":clipboard: Individual input (10 predictors)")
 
 with st.sidebar.form("input_form"):
     age = st.number_input("Age (years)", min_value=18, max_value=100, value=62, step=1)
@@ -69,7 +69,7 @@ with st.sidebar.form("input_form"):
     heart_disease = st.selectbox("Heart disease", [0, 1], index=0)
     copd = st.selectbox("COPD", [0, 1], index=0)
     stroke = st.selectbox("Stroke", [0, 1], index=0)
-    submitted = st.form_submit_button(":bar_chart: Predict 5-year mortality")
+    submitted = st.form_submit_button(":bar_chart: Predict sleep disorder risk")
 
 USER_INPUT: Dict[str, float] = {
     "age": age,
@@ -87,12 +87,11 @@ USER_INPUT: Dict[str, float] = {
 # ---------------------------------------------------------------------------
 # Main panel — header + prediction
 # ---------------------------------------------------------------------------
-st.title(":hospital: HCC Treatment Outcome Risk Calculator")
+st.title(":bed: Sleep Disorder Risk Screening Tool")
 st.markdown(
     """
     This tool implements the published **XGBoost + Boruta** prediction model for
-    5-year mortality after resection or liver transplantation in hepatocellular
-    carcinoma (HCC).
+    sleep disorder risk among community-dwelling middle-aged and older adults.
 
     **Reference**: Based on the open-access article using CHARLS external
     validation, TRIPOD+AI 27-item compliant. See the *About* tab below.
@@ -103,8 +102,8 @@ model, feature_info, background = load_artifacts()
 
 if not submitted:
     st.info(
-        ":information_source: Adjust patient values on the left, then press "
-        "**Predict 5-year mortality** to see the model output, SHAP contributions, "
+        ":information_source: Adjust individual values on the left, then press "
+        "**Predict sleep disorder risk** to see the model output, SHAP contributions, "
         "and a personalised explanation."
     )
     st.stop()
@@ -124,12 +123,14 @@ else:
     band, color = "High risk", "#d62728"
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Predicted 5-year mortality", f"{prob * 100:.1f}%")
+c1.metric("Predicted sleep disorder risk", f"{prob * 100:.1f}%")
 c2.metric("Risk category", band)
 c3.metric(
-    "Confidence (vs training AUC)",
-    f"{0.84:.2f}",
-    help="5-fold CV AUC reported in the original paper (training cohort).",
+    "Internal validation AUC",
+    f"{0.895:.3f}",
+    help="Internal validation AUC (5-fold cross-validation) reported in the source article. "
+    "External validation AUC in CHARLS: 0.802. The shipped model artifact is trained on a "
+    "synthetic demonstration cohort; replace models/ with your real artifacts for deployment.",
 )
 
 st.markdown(
@@ -199,7 +200,7 @@ with col_right:
 
 st.caption(
     "Feature values are shown post-imputation/scaling. SHAP values are in log-odds "
-    "units; positive values push the prediction towards higher mortality risk."
+    "units; positive values push the prediction towards higher sleep disorder risk."
 )
 
 # ---------------------------------------------------------------------------
@@ -209,16 +210,20 @@ with st.expander(":book: About this model and the source article"):
     st.markdown(
         """
         **Cohort**
-        - Training: 1,234 HCC patients from a tertiary hepatobiliary centre in Wuhan.
-        - External validation: China Health and Retirement Longitudinal Study (CHARLS).
-        - Outcome: 5-year all-cause mortality.
+        - Training: community health survey of middle-aged and older adults in
+          Wuhan, China (n = 15,755).
+        - External validation: China Health and Retirement Longitudinal Study
+          (CHARLS 2018, n = 13,472).
+        - Outcome: sleep disorder (binary).
 
         **Pipeline**
         1. 13 candidate predictors collected at baseline.
-        2. Boruta feature selection → 10 confirmed predictors.
+        2. Boruta feature selection.
         3. 5-fold cross-validated grid search across 8 algorithms.
-        4. Best model: XGBoost (CV AUC = 0.84).
-        5. SHAP for global and local interpretability.
+        4. Best model: XGBoost (training AUC = 0.922; internal validation
+           AUC = 0.895; external validation AUC = 0.802).
+        5. SHAP for global and local interpretability; E-value sensitivity
+           analysis for unmeasured confounding.
 
         **Reporting**: TRIPOD+AI 27-item checklist, full checklist in the
         Supplementary Materials of the source article.

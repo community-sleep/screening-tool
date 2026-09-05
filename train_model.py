@@ -1,21 +1,21 @@
 """
 Train the XGBoost + Boruta machine learning model described in:
-  "A machine learning approach to selecting treatment (resection vs transplant)
-   and predicting post-operative survival in hepatocellular carcinoma (HCC)"
+  "Machine learning-based prediction of sleep disorder risk among
+   community-dwelling middle-aged and older adults"
 
-This script reproduces the published prediction model end-to-end:
+This script reproduces the published prediction pipeline end-to-end:
   - 13 candidate predictors (demographics + comorbidities + psychosocial)
   - Boruta feature selection
   - 5-fold CV hyperparameter tuning (GridSearchCV)
   - 8 candidate algorithms (RF, XGBoost, SVM, KNN, MLP, LR, AdaBoost, GBM)
-  - Best model = XGBoost + Boruta (10 features)
+  - Best model = XGBoost (10 features)
 
-NOTE on data: The original study used de-identified clinical data that is not
-publicly shareable. This script therefore generates a *synthetic cohort* that
-mimics the published descriptive statistics (means, SDs, prevalence) so that
-the full pipeline is reproducible end-to-end. Replace `make_synthetic_data()`
-with `load_real_data()` and plug in your IRB-approved cohort when running
-this on real patients.
+NOTE on data: The original study used de-identified community health survey
+data that is not publicly shareable. This script therefore generates a
+*synthetic cohort* that mimics the published descriptive statistics (means,
+SDs, prevalence) so that the full pipeline is reproducible end-to-end.
+Replace `make_synthetic_data()` with `load_real_data()` and plug in your
+IRB-approved cohort when running this on real participants.
 
 Outputs:
   - models/best_model.joblib     trained XGBoost pipeline
@@ -102,7 +102,7 @@ def make_synthetic_data(n: int = 1234) -> pd.DataFrame:
     copd = np.random.binomial(1, 0.09, size=n)
     stroke = np.random.binomial(1, 0.07, size=n)
 
-    # Outcome: 5-year mortality, approximated from SHAP coefficients
+    # Outcome: sleep disorder (binary), risk approximated from published associations
     logit = (
         -3.0
         + 0.04 * (age - 60)
@@ -118,7 +118,7 @@ def make_synthetic_data(n: int = 1234) -> pd.DataFrame:
         - 0.10 * sex_male
     )
     p = 1 / (1 + np.exp(-logit))
-    mortality_5y = np.random.binomial(1, p, size=n)
+    sleep_disorder = np.random.binomial(1, p, size=n)
 
     df = pd.DataFrame(
         {
@@ -135,7 +135,7 @@ def make_synthetic_data(n: int = 1234) -> pd.DataFrame:
             "heart_disease": heart_disease,
             "copd": copd,
             "stroke": stroke,
-            "mortality_5y": mortality_5y,
+            "sleep_disorder": sleep_disorder,
         }
     )
     return df
@@ -145,7 +145,7 @@ def load_real_data() -> pd.DataFrame:
     """Override this in your local environment to load the IRB-approved cohort."""
     raise NotImplementedError(
         "Replace make_synthetic_data() with a loader that returns your "
-        "de-identified cohort with columns matching ALL_FEATURES + 'mortality_5y'."
+        "de-identified cohort with columns matching ALL_FEATURES + 'sleep_disorder'."
     )
 
 
@@ -275,7 +275,7 @@ def main() -> None:
         print("    Loaded SYNTHETIC cohort, n =", len(df))
 
     X = df[ALL_FEATURES].copy()
-    y = df["mortality_5y"].astype(int)
+    y = df["sleep_disorder"].astype(int)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=RANDOM_STATE
