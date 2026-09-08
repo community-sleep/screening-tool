@@ -84,24 +84,95 @@ def assign_tier(prob: float):
 
 
 # ---------------------------------------------------------------------------
+# Demo shortcut for eFigure 1 screenshots
+# ---------------------------------------------------------------------------
+# Preset inputs so the sidebar form and the main-panel output stay in sync
+# when the app is opened with ?demo=high or ?demo=low.
+DEMO_LIST = st.query_params.get_all("demo")
+DEMO = DEMO_LIST[0] if DEMO_LIST else None
+
+if DEMO == "high":
+    # 70-year-old male with depression, fatigue, hypertension, diabetes
+    _demo_defaults = {
+        "Age": 70,
+        "Sex": 1,              # Male
+        "Smoke": 1,            # Yes
+        "Depression": 1,       # Yes
+        "Fatigue": 1,          # Yes
+        "Terrified": 0,        # No
+        "Afraid": 0,           # No
+        "Hypertension": 1,     # Yes
+        "Diabetes": 1,         # Yes
+        "Dyslipidemia": 0,     # No
+        "Cardiopathy": 0,      # No
+        "COPD": 0,             # No
+        "Stroke": 0,           # No
+    }
+elif DEMO == "low":
+    # 65-year-old female without any risk factors
+    _demo_defaults = {
+        "Age": 65,
+        "Sex": 0,              # Female
+        "Smoke": 0,            # No
+        "Depression": 0,       # No
+        "Fatigue": 0,          # No
+        "Terrified": 0,        # No
+        "Afraid": 0,           # No
+        "Hypertension": 0,     # No
+        "Diabetes": 0,         # No
+        "Dyslipidemia": 0,     # No
+        "Cardiopathy": 0,      # No
+        "COPD": 0,             # No
+        "Stroke": 0,           # No
+    }
+else:
+    _demo_defaults = None
+
+
+def _default(name: str):
+    """Return the default value/index for a given predictor.
+
+    If a demo preset exists, use it; otherwise use the ordinary default.
+    """
+    ordinary = {
+        "Age": 65,
+        "Sex": 0,          # Female
+        "Smoke": 0,        # No
+        "Depression": 0,   # No
+        "Fatigue": 0,      # No
+        "Terrified": 0,    # No
+        "Afraid": 0,       # No
+        "Hypertension": 0, # No
+        "Diabetes": 0,     # No
+        "Dyslipidemia": 0, # No
+        "Cardiopathy": 0,  # No
+        "COPD": 0,         # No
+        "Stroke": 0,       # No
+    }
+    if _demo_defaults is not None:
+        return int(_demo_defaults[name])
+    return ordinary[name]
+
+
+# ---------------------------------------------------------------------------
 # Sidebar - individual input (13 predictors)
 # ---------------------------------------------------------------------------
 st.sidebar.header(":clipboard: Individual input (13 predictors)")
 
 with st.sidebar.form("input_form"):
-    age = st.number_input("Age (years)", min_value=45, max_value=100, value=65, step=1)
-    male = st.selectbox("Sex", ["Female", "Male"], index=0) == "Male"
-    current_smoking = st.selectbox("Current smoking", ["No", "Yes"], index=0) == "Yes"
-    depression = st.selectbox("Depression", ["No", "Yes"], index=0) == "Yes"
-    fatigue = st.selectbox("Fatigue", ["No", "Yes"], index=0) == "Yes"
-    feeling_terrified = st.selectbox("Feeling terrified", ["No", "Yes"], index=0) == "Yes"
-    feeling_afraid = st.selectbox("Feeling afraid", ["No", "Yes"], index=0) == "Yes"
-    hypertension = st.selectbox("Hypertension", ["No", "Yes"], index=0) == "Yes"
-    diabetes = st.selectbox("Diabetes", ["No", "Yes"], index=0) == "Yes"
-    dyslipidemia = st.selectbox("Dyslipidemia", ["No", "Yes"], index=0) == "Yes"
-    heart_disease = st.selectbox("Heart disease", ["No", "Yes"], index=0) == "Yes"
-    copd = st.selectbox("Chronic obstructive pulmonary disease (COPD)", ["No", "Yes"], index=0) == "Yes"
-    stroke = st.selectbox("Stroke", ["No", "Yes"], index=0) == "Yes"
+    age = st.number_input("Age (years)", min_value=45, max_value=100, value=_default("Age"), step=1)
+    male = st.selectbox("Sex", ["Female", "Male"], index=_default("Sex")) == "Male"
+    current_smoking = st.selectbox("Current smoking", ["No", "Yes"], index=_default("Smoke")) == "Yes"
+    depression = st.selectbox("Depression", ["No", "Yes"], index=_default("Depression")) == "Yes"
+    fatigue = st.selectbox("Fatigue", ["No", "Yes"], index=_default("Fatigue")) == "Yes"
+    feeling_terrified = st.selectbox("Feeling terrified", ["No", "Yes"], index=_default("Terrified")) == "Yes"
+    feeling_afraid = st.selectbox("Feeling afraid", ["No", "Yes"], index=_default("Afraid")) == "Yes"
+    hypertension = st.selectbox("Hypertension", ["No", "Yes"], index=_default("Hypertension")) == "Yes"
+    diabetes = st.selectbox("Diabetes", ["No", "Yes"], index=_default("Diabetes")) == "Yes"
+    dyslipidemia = st.selectbox("Dyslipidemia", ["No", "Yes"], index=_default("Dyslipidemia")) == "Yes"
+    heart_disease = st.selectbox("Heart disease", ["No", "Yes"], index=_default("Cardiopathy")) == "Yes"
+    copd = st.selectbox("Chronic obstructive pulmonary disease (COPD)", ["No", "Yes"], index=_default("COPD")) == "Yes"
+    stroke = st.selectbox("Stroke", ["No", "Yes"], index=_default("Stroke")) == "Yes"
     submitted = st.form_submit_button(":bar_chart: Predict sleep disorder risk")
 
 USER_INPUT: Dict[str, float] = {
@@ -120,6 +191,10 @@ USER_INPUT: Dict[str, float] = {
     "Stroke": 1 if stroke else 0,
 }
 
+# Demo mode bypasses the form submit button and shows the prediction immediately
+if DEMO in ("high", "low"):
+    submitted = True
+
 # ---------------------------------------------------------------------------
 # Main panel - header
 # ---------------------------------------------------------------------------
@@ -134,31 +209,6 @@ st.markdown(
 
 model, feature_info = load_artifacts()
 features = feature_info["final_model_features"]
-
-# Demo shortcut for eFigure 1 screenshots: bypass the form and use preset values
-DEMO_LIST = st.query_params.get_all("demo")
-DEMO = DEMO_LIST[0] if DEMO_LIST else None
-if DEMO in ("high", "low"):
-    submitted = True
-    if DEMO == "high":
-        # 70-year-old male with depression, fatigue, hypertension, diabetes
-        USER_INPUT.update(
-            {
-                "Age": 70,
-                "Sex": 1,
-                "Smoke": 1,
-                "Depression": 1,
-                "Fatigue": 1,
-                "Terrified": 0,
-                "Afraid": 0,
-                "Hypertension": 1,
-                "Diabetes": 1,
-                "Dyslipidemia": 0,
-                "Cardiopathy": 0,
-                "COPD": 0,
-                "Stroke": 0,
-            }
-        )
 
 if not submitted:
     st.info(
