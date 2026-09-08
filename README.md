@@ -39,7 +39,7 @@ community-dwelling middle-aged and older adults.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/18108666570/screening-tool.git
+git clone https://github.com/community-sleep/screening-tool.git
 cd screening-tool
 
 # 2. Create a virtual environment (recommended)
