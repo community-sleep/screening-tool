@@ -1,17 +1,17 @@
 """
-Streamlit web application for the published XGBoost + Boruta prediction model.
+Streamlit web application for the published XGBoost prediction model.
 
 Run locally:
     streamlit run app.py
 
-The app accepts the 10 model predictors from the user and returns:
-  - Predicted probability of sleep disorder
-  - Risk category (Low / Intermediate / High)
+The app accepts the 13 model predictors from the user and returns:
+  - Predicted probability of sleep disturbance
+  - Three-tier risk stratification (Low <0.25 / Intermediate 0.25-0.40 / High >0.40)
+    with recommended community healthcare actions
   - SHAP feature contributions for the individual prediction
-  - Local feature importance for the input vector
 
-The model, preprocessor, feature list, and SHAP background are loaded from the
-artifacts produced by `train_model.py` (see /models directory).
+The model artifact in /models was trained on the de-identified Wuhan community
+health survey cohort (n = 15,755) described in the source article.
 """
 
 from __future__ import annotations
@@ -36,112 +36,181 @@ st.set_page_config(
 )
 
 ROOT = Path(__file__).parent
-MODEL_PATH = ROOT / "models" / "best_model.joblib"
+MODEL_PATH = ROOT / "models" / "xgboost_sleep_model.pkl"
 FEATURES_PATH = ROOT / "models" / "feature_list.json"
-BG_PATH = ROOT / "models" / "shap_background.joblib"
 
 
 @st.cache_resource(show_spinner="Loading model ...")
 def load_artifacts():
     model = joblib.load(MODEL_PATH)
     feature_info = json.loads(FEATURES_PATH.read_text(encoding="utf-8"))
-    background = joblib.load(BG_PATH) if BG_PATH.exists() else None
-    return model, feature_info, background
+    return model, feature_info
 
 
 # ---------------------------------------------------------------------------
-# Sidebar — patient input
+# Three-tier risk stratification (Table 4 of the source article)
 # ---------------------------------------------------------------------------
-st.sidebar.header(":clipboard: Individual input (10 predictors)")
+RISK_TIERS = [
+    {
+        "name": "Low Risk",
+        "range": "Predicted probability < 0.25",
+        "action": "Village health station: sleep hygiene posters; online educational materials",
+        "burden": "Low (population-level)",
+        "color": "#2ca02c",
+    },
+    {
+        "name": "Intermediate Risk",
+        "range": "Predicted probability 0.25 - 0.40",
+        "action": "Family physician monthly follow-up; brief CBT-I self-help materials",
+        "burden": "Moderate (targeted)",
+        "color": "#ff7f0e",
+    },
+    {
+        "name": "High Risk",
+        "range": "Predicted probability > 0.40",
+        "action": "Referral to county-level sleep clinic; comprehensive evaluation",
+        "burden": "High (specialized)",
+        "color": "#d62728",
+    },
+]
+
+
+def assign_tier(prob: float):
+    if prob < 0.25:
+        return RISK_TIERS[0]
+    if prob <= 0.40:
+        return RISK_TIERS[1]
+    return RISK_TIERS[2]
+
+
+# ---------------------------------------------------------------------------
+# Sidebar - individual input (13 predictors)
+# ---------------------------------------------------------------------------
+st.sidebar.header(":clipboard: Individual input (13 predictors)")
 
 with st.sidebar.form("input_form"):
-    age = st.number_input("Age (years)", min_value=18, max_value=100, value=62, step=1)
-    depression_score = st.number_input(
-        "Depression score (PHQ-9, 0–27)", min_value=0, max_value=27, value=4, step=1
-    )
-    fatigue_score = st.number_input(
-        "Fatigue score (0–21)", min_value=0, max_value=21, value=5, step=1
-    )
-    feeling_terrified = st.selectbox("Feeling terrified (yes/no)", [0, 1], index=0)
-    feeling_afraid = st.selectbox("Feeling afraid (yes/no)", [0, 1], index=0)
-    hypertension = st.selectbox("Hypertension", [0, 1], index=0)
-    diabetes = st.selectbox("Diabetes", [0, 1], index=0)
-    heart_disease = st.selectbox("Heart disease", [0, 1], index=0)
-    copd = st.selectbox("COPD", [0, 1], index=0)
-    stroke = st.selectbox("Stroke", [0, 1], index=0)
+    age = st.number_input("Age (years)", min_value=45, max_value=100, value=65, step=1)
+    male = st.selectbox("Sex", ["Female", "Male"], index=0) == "Male"
+    current_smoking = st.selectbox("Current smoking", ["No", "Yes"], index=0) == "Yes"
+    depression = st.selectbox("Depression", ["No", "Yes"], index=0) == "Yes"
+    fatigue = st.selectbox("Fatigue", ["No", "Yes"], index=0) == "Yes"
+    feeling_terrified = st.selectbox("Feeling terrified", ["No", "Yes"], index=0) == "Yes"
+    feeling_afraid = st.selectbox("Feeling afraid", ["No", "Yes"], index=0) == "Yes"
+    hypertension = st.selectbox("Hypertension", ["No", "Yes"], index=0) == "Yes"
+    diabetes = st.selectbox("Diabetes", ["No", "Yes"], index=0) == "Yes"
+    dyslipidemia = st.selectbox("Dyslipidemia", ["No", "Yes"], index=0) == "Yes"
+    heart_disease = st.selectbox("Heart disease", ["No", "Yes"], index=0) == "Yes"
+    copd = st.selectbox("Chronic obstructive pulmonary disease (COPD)", ["No", "Yes"], index=0) == "Yes"
+    stroke = st.selectbox("Stroke", ["No", "Yes"], index=0) == "Yes"
     submitted = st.form_submit_button(":bar_chart: Predict sleep disorder risk")
 
 USER_INPUT: Dict[str, float] = {
-    "age": age,
-    "depression_score": depression_score,
-    "fatigue_score": fatigue_score,
-    "feeling_terrified": feeling_terrified,
-    "feeling_afraid": feeling_afraid,
-    "hypertension": hypertension,
-    "diabetes": diabetes,
-    "heart_disease": heart_disease,
-    "copd": copd,
-    "stroke": stroke,
+    "Age": age,
+    "Sex": 1 if male else 0,
+    "Smoke": 1 if current_smoking else 0,
+    "Depression": 1 if depression else 0,
+    "Fatigue": 1 if fatigue else 0,
+    "Terrified": 1 if feeling_terrified else 0,
+    "Afraid": 1 if feeling_afraid else 0,
+    "Hypertension": 1 if hypertension else 0,
+    "Diabetes": 1 if diabetes else 0,
+    "Dyslipidemia": 1 if dyslipidemia else 0,
+    "Cardiopathy": 1 if heart_disease else 0,
+    "COPD": 1 if copd else 0,
+    "Stroke": 1 if stroke else 0,
 }
 
 # ---------------------------------------------------------------------------
-# Main panel — header + prediction
+# Main panel - header
 # ---------------------------------------------------------------------------
 st.title(":bed: Sleep Disorder Risk Screening Tool")
 st.markdown(
     """
-    This tool implements the published **XGBoost + Boruta** prediction model for
-    sleep disorder risk among community-dwelling middle-aged and older adults.
-
-    **Reference**: Based on the open-access article using CHARLS external
-    validation, TRIPOD+AI 27-item compliant. See the *About* tab below.
+    This tool implements the **XGBoost** prediction model for sleep disturbance
+    risk among community-dwelling middle-aged and older adults, externally
+    validated in the China Health and Retirement Longitudinal Study (CHARLS).
     """
 )
 
-model, feature_info, background = load_artifacts()
+model, feature_info = load_artifacts()
+features = feature_info["final_model_features"]
+
+# Demo shortcut for eFigure 1 screenshots: bypass the form and use preset values
+DEMO_LIST = st.query_params.get_all("demo")
+DEMO = DEMO_LIST[0] if DEMO_LIST else None
+if DEMO in ("high", "low"):
+    submitted = True
+    if DEMO == "high":
+        # 70-year-old male with depression, fatigue, hypertension, diabetes
+        USER_INPUT.update(
+            {
+                "Age": 70,
+                "Sex": 1,
+                "Smoke": 1,
+                "Depression": 1,
+                "Fatigue": 1,
+                "Terrified": 0,
+                "Afraid": 0,
+                "Hypertension": 1,
+                "Diabetes": 1,
+                "Dyslipidemia": 0,
+                "Cardiopathy": 0,
+                "COPD": 0,
+                "Stroke": 0,
+            }
+        )
 
 if not submitted:
     st.info(
-        ":information_source: Adjust individual values on the left, then press "
-        "**Predict sleep disorder risk** to see the model output, SHAP contributions, "
-        "and a personalised explanation."
+        ":information_source: Adjust individual values on the left (13 predictors), "
+        "then press **Predict sleep disorder risk** to see the predicted probability, "
+        "the three-tier risk stratification with recommended community healthcare "
+        "actions, and SHAP feature contributions."
     )
     st.stop()
 
 # Build input frame in the exact order the model expects
-features = feature_info["final_model_features"]
 X_new = pd.DataFrame([{f: USER_INPUT[f] for f in features}])
 
 prob = float(model.predict_proba(X_new)[0, 1])
+tier = assign_tier(prob)
 
-# Risk bands chosen from the published calibration curve (≈ tertiles)
-if prob < 0.20:
-    band, color = "Low risk", "#2ca02c"
-elif prob < 0.50:
-    band, color = "Intermediate risk", "#ff7f0e"
-else:
-    band, color = "High risk", "#d62728"
+# ---------------------------------------------------------------------------
+# Prediction output
+# ---------------------------------------------------------------------------
+st.subheader(":bar_chart: Predicted risk")
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Predicted sleep disorder risk", f"{prob * 100:.1f}%")
-c2.metric("Risk category", band)
+c1.metric("Predicted probability of sleep disturbance", f"{prob * 100:.1f}%")
+c2.metric("Risk category", tier["name"])
 c3.metric(
-    "Internal validation AUC",
-    f"{0.895:.3f}",
-    help="Internal validation AUC (5-fold cross-validation) reported in the source article. "
-    "External validation AUC in CHARLS: 0.802. The shipped model artifact is trained on a "
-    "synthetic demonstration cohort; replace models/ with your real artifacts for deployment.",
+    "Model performance (validation)",
+    "AUC 0.895 / 0.802",
+    help="Internal validation AUC = 0.895 (5-fold cross-validation within the "
+    "development cohort); external validation AUC = 0.802 in CHARLS 2018, "
+    "as reported in the source article.",
 )
 
-st.markdown(
-    f"""
-    <div style="padding:1em;border-radius:0.5em;background:{color};color:white">
-      <strong>Risk band:</strong> {band} &nbsp;|&nbsp;
-      <strong>Probability:</strong> {prob:.3f}
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ---------------------------------------------------------------------------
+# Three-tier risk stratification display
+# ---------------------------------------------------------------------------
+st.subheader(":triangular_ruler: Three-tier risk stratification and recommended community action")
+
+for t in RISK_TIERS:
+    highlight = " (this individual)" if t["name"] == tier["name"] else ""
+    border = f"2px solid {t['color']}" if t["name"] == tier["name"] else "1px solid #cccccc"
+    st.markdown(
+        f"""
+        <div style="padding:0.8em 1em;margin:0.4em 0;border-radius:0.5em;
+                    border:{border};background:#f9f9f9">
+          <span style="color:{t['color']};font-weight:bold;font-size:1.05em">
+            {t['name']}{highlight}</span>
+          &nbsp;|&nbsp; {t['range']} &nbsp;|&nbsp; Resource burden: {t['burden']}
+          <br><strong>Recommended community action:</strong> {t['action']}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------------------------------------------------------
 # SHAP explanation
@@ -149,28 +218,18 @@ st.markdown(
 st.subheader(":mag: Why did the model predict this? (SHAP)")
 
 with st.spinner("Computing SHAP values ..."):
-    pre = model.named_steps["pre"]
-    clf = model.named_steps["clf"]
-    X_new_pre = pre.transform(X_new)
-    feature_names = pre.get_feature_names_out()
-
-    if background is not None:
-        bg_pre = pre.transform(background)
-        explainer = shap.TreeExplainer(clf)
-    else:
-        explainer = shap.TreeExplainer(clf)
-
-    shap_values = explainer.shap_values(X_new_pre)
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_new)
     if isinstance(shap_values, list):  # binary classifier
         shap_values = shap_values[1]
     base_value = float(np.array(explainer.expected_value).ravel()[0])
     sv = shap_values[0]
-    sv_series = pd.Series(sv, index=feature_names).sort_values(key=np.abs, ascending=False)
+    sv_series = pd.Series(sv, index=features).sort_values(key=np.abs, ascending=False)
 
     contrib_df = pd.DataFrame(
         {
-            "feature": [c.split("__")[-1] for c in sv_series.index],
-            "value": X_new.iloc[0][[c.split("__")[-1] for c in sv_series.index]].values,
+            "feature": sv_series.index,
+            "value": [USER_INPUT[f] for f in sv_series.index],
             "shap_value": sv_series.values,
         }
     )
@@ -179,7 +238,7 @@ col_left, col_right = st.columns([1, 1])
 with col_left:
     st.markdown("**Top feature contributions (sorted by |SHAP|)**")
     st.dataframe(
-        contrib_df.style.format({"shap_value": "{:.3f}", "value": "{:.2f}"}),
+        contrib_df.style.format({"shap_value": "{:.3f}", "value": "{:.0f}"}),
         use_container_width=True,
         hide_index=True,
     )
@@ -199,8 +258,9 @@ with col_right:
     st.code("\n".join(text_rows), language="text")
 
 st.caption(
-    "Feature values are shown post-imputation/scaling. SHAP values are in log-odds "
-    "units; positive values push the prediction towards higher sleep disorder risk."
+    "SHAP values are in log-odds units; positive values push the prediction "
+    "towards higher sleep-disturbance risk. Feature coding: Sex 1 = male, 0 = "
+    "female; all binary predictors 1 = present, 0 = absent."
 )
 
 # ---------------------------------------------------------------------------
@@ -209,23 +269,25 @@ st.caption(
 with st.expander(":book: About this model and the source article"):
     st.markdown(
         """
-        **Cohort**
-        - Training: community health survey of middle-aged and older adults in
-          Wuhan, China (n = 15,755).
+        **Cohorts**
+        - Development: community health survey of middle-aged and older adults
+          in Wuhan, China (n = 15,755; sleep disturbance prevalence 35.9%).
         - External validation: China Health and Retirement Longitudinal Study
-          (CHARLS 2018, n = 13,472).
-        - Outcome: sleep disorder (binary).
+          (CHARLS 2018, n = 13,472; prevalence 36.0%).
 
         **Pipeline**
-        1. 13 candidate predictors collected at baseline.
-        2. Boruta feature selection.
-        3. 5-fold cross-validated grid search across 8 algorithms.
-        4. Best model: XGBoost (training AUC = 0.922; internal validation
+        1. 13 candidate predictors selected a priori from the geriatric sleep
+           epidemiology literature; all 13 retained by penalized logistic
+           regression, multivariable logistic regression, and the Boruta
+           algorithm.
+        2. 5-fold cross-validated hyperparameter tuning across 8 algorithms
+           (RF, XGBoost, SVM, KNN, MLP, logistic regression, AdaBoost, GBM).
+        3. Best model: XGBoost (training AUC = 0.922; internal validation
            AUC = 0.895; external validation AUC = 0.802).
-        5. SHAP for global and local interpretability; E-value sensitivity
+        4. SHAP for global and local interpretability; E-value sensitivity
            analysis for unmeasured confounding.
 
-        **Reporting**: TRIPOD+AI 27-item checklist, full checklist in the
+        **Reporting**: TRIPOD+AI 27-item checklist, provided in the
         Supplementary Materials of the source article.
         """
     )
@@ -233,8 +295,8 @@ with st.expander(":book: About this model and the source article"):
 st.sidebar.markdown(
     """
     ---
-    :warning: **Research use only.** This calculator is an academic prototype
-    derived from the published study. It must not be used as the sole basis
-    for clinical decision-making.
+    :warning: **Research use only.** This screening tool is an academic
+    prototype derived from the published study. It must not be used as the
+    sole basis for clinical decision-making.
     """
 )

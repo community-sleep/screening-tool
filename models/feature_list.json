@@ -1,51 +1,56 @@
 {
   "all_candidates": [
-    "age",
-    "depression_score",
-    "fatigue_score",
-    "sex_male",
-    "current_smoking",
-    "feeling_terrified",
-    "feeling_afraid",
-    "hypertension",
-    "diabetes",
-    "dyslipidemia",
-    "heart_disease",
-    "copd",
-    "stroke"
+    "Age",
+    "Sex",
+    "Smoke",
+    "Depression",
+    "Fatigue",
+    "Terrified",
+    "Afraid",
+    "Hypertension",
+    "Diabetes",
+    "Dyslipidemia",
+    "Cardiopathy",
+    "COPD",
+    "Stroke"
   ],
-  "boruta_confirmed": [
-    "fatigue_score",
-    "feeling_afraid",
-    "hypertension",
-    "heart_disease",
-    "stroke"
-  ],
+  "selection_methods": {
+    "penalized_logistic_regression": "all 13 retained",
+    "multivariable_logistic_regression": "all 13 retained",
+    "boruta": "all 13 confirmed"
+  },
   "final_model_features": [
-    "age",
-    "depression_score",
-    "fatigue_score",
-    "feeling_terrified",
-    "feeling_afraid",
-    "hypertension",
-    "diabetes",
-    "heart_disease",
-    "copd",
-    "stroke"
+    "Afraid",
+    "Age",
+    "COPD",
+    "Cardiopathy",
+    "Depression",
+    "Diabetes",
+    "Dyslipidemia",
+    "Fatigue",
+    "Hypertension",
+    "Sex",
+    "Smoke",
+    "Stroke",
+    "Terrified"
   ],
-  "boruta_full": {
-    "age": false,
-    "depression_score": false,
-    "fatigue_score": true,
-    "sex_male": false,
-    "current_smoking": false,
-    "feeling_terrified": false,
-    "feeling_afraid": true,
-    "hypertension": true,
-    "diabetes": false,
-    "dyslipidemia": false,
-    "heart_disease": true,
-    "copd": false,
-    "stroke": true
+  "coding": {
+    "Sex": "1 = male, 0 = female",
+    "binary_predictors": "1 = present, 0 = absent",
+    "Age": "years, continuous",
+    "outcome": "Sleep: 1 = sleep disturbance, 0 = no sleep disturbance"
+  },
+  "model": {
+    "algorithm": "XGBoost",
+    "hyperparameters": {
+      "learning_rate": 0.1,
+      "max_depth": 5,
+      "n_estimators": 200,
+      "random_state": 123
+    },
+    "development_cohort": "Wuhan community health survey, n = 15,755 (70/30 train/internal-validation split, seed 123)",
+    "training_auc": 0.922,
+    "internal_validation_auc": 0.895,
+    "external_validation_auc_charls_2018": 0.802
   }
 }

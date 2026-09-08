@@ -11,8 +11,8 @@ venv/
 env/
 
 # Trained model artifacts
-# Note: best_model.joblib (122KB) and shap_background.joblib (7KB) ARE checked in
-# so the app runs out-of-the-box. To exclude (e.g. for redistribution): uncomment below.
+# Note: xgboost_sleep_model.pkl (≈500KB) IS checked in so the app runs out-of-the-box.
+# To exclude (e.g. for redistribution): uncomment below.
 # models/*.joblib
 # models/*.pkl
 

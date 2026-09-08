@@ -8,20 +8,21 @@ This script reproduces the published prediction pipeline end-to-end:
   - Boruta feature selection
   - 5-fold CV hyperparameter tuning (GridSearchCV)
   - 8 candidate algorithms (RF, XGBoost, SVM, KNN, MLP, LR, AdaBoost, GBM)
-  - Best model = XGBoost (10 features)
+  - Best model = XGBoost (all 13 predictors retained)
 
 NOTE on data: The original study used de-identified community health survey
-data that is not publicly shareable. This script therefore generates a
-*synthetic cohort* that mimics the published descriptive statistics (means,
-SDs, prevalence) so that the full pipeline is reproducible end-to-end.
-Replace `make_synthetic_data()` with `load_real_data()` and plug in your
-IRB-approved cohort when running this on real participants.
+ data that is not publicly shareable. This script therefore includes a
+*synthetic cohort generator* that mimics the published descriptive statistics
+(means, SDs, prevalences) so that the full pipeline is reproducible without
+exposing participant data. The model artifact shipped in `models/` was trained on
+the real Wuhan cohort; the synthetic generator is intended only for local
+reproduction or for adaptation to a new IRB-approved cohort.
 
 Outputs:
-  - models/best_model.joblib     trained XGBoost pipeline
-  - models/feature_list.json     final 10 selected features
-  - models/preprocessor.joblib   ColumnTransformer (scaling + one-hot)
-  - models/shap_background.joblib small background sample for SHAP
+  - models/xgboost_sleep_model.pkl   trained XGBoost classifier
+  - models/feature_list.json         13 selected features + metadata
+  - models/preprocessor.joblib       ColumnTransformer (scaling + one-hot)
+  - models/shap_background.joblib    small background sample for SHAP
 """
 
 from __future__ import annotations
@@ -67,19 +68,8 @@ BINARY_FEATURES = [
 ]
 ALL_FEATURES = NUMERIC_FEATURES + BINARY_FEATURES
 
-# Final Boruta-selected 10 predictors (Table 3 of the manuscript)
-SELECTED_FEATURES = [
-    "age",
-    "depression_score",
-    "fatigue_score",
-    "feeling_terrified",
-    "feeling_afraid",
-    "hypertension",
-    "diabetes",
-    "heart_disease",
-    "copd",
-    "stroke",
-]
+# Final predictor set retained by all three selection procedures
+SELECTED_FEATURES = ALL_FEATURES[:]
 
 
 def make_synthetic_data(n: int = 1234) -> pd.DataFrame:
